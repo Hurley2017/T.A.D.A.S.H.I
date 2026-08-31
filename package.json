@@ -24,7 +24,8 @@
     "verify:whisper": "tsx scripts/verify-whisper.ts",
     "verify:llama": "tsx scripts/verify-llama.ts",
     "setup:cc": "tsx scripts/setup-commandcode-cli.ts",
-    "verify:cc": "tsx scripts/verify-commandcode.ts"
+    "verify:cc": "tsx scripts/verify-commandcode.ts",
+    "test:clean-install": "tsx scripts/test-clean-install.ts"
   },
   "dependencies": {
     "chokidar": "^4.0.3",

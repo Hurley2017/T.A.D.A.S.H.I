@@ -19,7 +19,8 @@ const api = {
   delegateInstall: () => ipcRenderer.invoke('delegate:install'),
   delegateSetTier: (tier: 'free-only' | 'auto') => ipcRenderer.invoke('delegate:tier', tier),
   setupStatus: () => ipcRenderer.invoke('setup:status'),
-  setupRun: () => ipcRenderer.invoke('setup:run'),
+  setupProbe: () => ipcRenderer.invoke('setup:probe'),
+  setupRun: (choices: { root: string; modelId: string; delegateTier: 'free-only' | 'auto'; wakePhrase: string; voiceOutput: boolean; alwaysListening: boolean; whisperModel: 'base.en' | 'small.en' }) => ipcRenderer.invoke('setup:run', choices),
   setupCancel: () => ipcRenderer.invoke('setup:cancel'),
   onEvent: (listener: (event: ProjectEvent) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, event: ProjectEvent) => listener(event);
@@ -68,7 +69,8 @@ export type TadashiApi = {
   delegateInstall: () => Promise<{ installed: boolean; path: string }>;
   delegateSetTier: (tier: 'free-only' | 'auto') => Promise<{ delegateModelTier: 'free-only' | 'auto' }>;
   setupStatus: () => Promise<{ complete: boolean; drive: string; freeBytes: number; requiredBytes: number; components: { node: boolean; llama: boolean; model: boolean; whisper: boolean; cli: boolean; python: boolean }; missing: string[] }>;
-  setupRun: () => Promise<{ ok: boolean; root: string }>;
+  setupProbe: () => Promise<{ gpu: { vendor: string; name: string; vramGb: number | null }; cpuCount: number; ramGb: number; drives: { mount: string; freeBytes: number; preferred: boolean }[] }>;
+  setupRun: (choices: { root: string; modelId: string; delegateTier: 'free-only' | 'auto'; wakePhrase: string; voiceOutput: boolean; alwaysListening: boolean; whisperModel: 'base.en' | 'small.en' }) => Promise<{ ok: boolean; root: string }>;
   setupCancel: () => Promise<{ cancelled: boolean }>;
   onEvent: (listener: (event: ProjectEvent) => void) => () => void;
 };

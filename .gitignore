@@ -5,6 +5,9 @@ release/
 release-validation*/
 release-delegation/
 release-setup/
+release-custom/
+release-custom-2/
+release-brain/
 test-results/
 *.log
 .env

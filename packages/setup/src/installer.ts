@@ -1,8 +1,6 @@
-import { mkdirSync, createWriteStream, rmSync } from 'node:fs';
-import { Readable, Transform, type TransformCallback } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
+import { mkdirSync, createWriteStream, writeFileSync, rmSync } from 'node:fs';
+import { join, isAbsolute } from 'node:path';
 import { spawn } from 'node:child_process';
-import { join } from 'node:path';
 import type { ComponentManifest } from './manifest';
 import { verifyComponent } from './manifest';
 
@@ -31,7 +29,9 @@ export async function installComponent(component: ComponentManifest, options: In
     for (let index = 0; index < component.steps.length; index += 1) {
       const step = component.steps[index];
       onEvent?.({ kind: 'download-progress', component: component.id, step: index, received: 0, total: 0 });
-      await downloadAndExtract(step.url, join(root, step.targetDir), step.kind, (stepIndex, received, total) => onEvent?.({ kind: 'download-progress', component: component.id, step: index, received, total }), signal);
+      // step.targetDir is already absolute (built from root); only fall back to root when relative.
+      const destRoot = isAbsolute(step.targetDir) ? step.targetDir : join(root, step.targetDir);
+      await downloadAndExtract(step.url, destRoot, step.kind, (stepIndex, received, total) => onEvent?.({ kind: 'download-progress', component: component.id, step: index, received, total }), signal);
       if (step.runAfter) {
         onEvent?.({ kind: 'extract', component: component.id, step: index });
       }
@@ -57,39 +57,54 @@ async function downloadAndExtract(url: string, targetDir: string, kind: 'archive
   const total = Number(response.headers.get('content-length') ?? 0);
   const filename = url.split('/').pop() ?? 'download.bin';
   const archivePath = join(targetDir, filename);
-  const stream = Readable.fromWeb(response.body as import('node:stream/web').ReadableStream);
+  // Stream to disk directly (the model is ~5 GB; buffering it in memory is not viable).
+  const reader = response.body.getReader();
   let received = 0;
-  await pipeline(
-    stream,
-    new TransformProgress((chunk) => {
-      received += chunk.length;
+  try {
+    const file = createWriteStream(archivePath, { flags: 'w' });
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      if (!file.write(Buffer.from(value))) await new Promise<void>((resolve) => file.once('drain', () => resolve()));
+      received += value.length;
       onProgress(0, received, total);
-    }),
-    createWriteStream(archivePath),
-  );
-  if (kind === 'archive') {
+    }
+    await new Promise<void>((resolve, reject) => { file.end(() => resolve()); file.on('error', reject); });
     onProgress(0, received, total);
-    const extract = { command: process.platform === 'win32' ? 'powershell.exe' : 'unzip', args: process.platform === 'win32' ? ['-NoProfile', '-Command', `Expand-Archive -Force -LiteralPath '${archivePath}' -DestinationPath '${targetDir}'`] : ['-o', archivePath, '-d', targetDir] };
+    if (kind === 'archive') await extractArchive(archivePath, targetDir, filename);
+  } catch (error) {
+    rmSync(archivePath, { force: true });
+    throw error;
+  }
+}
+
+async function extractArchive(archivePath: string, targetDir: string, filename: string): Promise<void> {
+  if (process.platform !== 'win32') {
     const result = await new Promise<number>((resolve) => {
-      const child = spawn(extract.command, extract.args, { shell: false, windowsHide: true });
+      const child = spawn('unzip', ['-o', archivePath, '-d', targetDir], { shell: false });
       child.on('close', (code) => resolve(code ?? 1));
       child.on('error', () => resolve(1));
     });
     if (result !== 0) throw new Error(`Extraction failed for ${filename}`);
-    if (filename.endsWith('.zip')) rmSync(archivePath, { force: true });
+    rmSync(archivePath, { force: true });
+    return;
   }
-}
-
-class TransformProgress extends Transform {
-  constructor(private readonly onChunk: (chunk: Buffer) => void) { super(); }
-  _transform(chunk: Buffer, _encoding: string, callback: TransformCallback): void {
-    this.onChunk(chunk);
-    callback(null, chunk);
-  }
+  // Windows: Expand-Archive reliably handles zip; pass the command via a temp script file.
+  const scriptPath = join(targetDir, '.extract.ps1');
+  writeFileSync(scriptPath, `Expand-Archive -Force -LiteralPath '${archivePath.replace(/'/g, "''")}' -DestinationPath '${targetDir.replace(/'/g, "''")}'\n`, 'utf8');
+  const result = await new Promise<number>((resolve) => {
+    const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath], { shell: false, windowsHide: true });
+    child.on('close', (code) => resolve(code ?? 1));
+    child.on('error', () => resolve(1));
+  });
+  rmSync(scriptPath, { force: true });
+  rmSync(archivePath, { force: true });
+  if (result !== 0) throw new Error(`Extraction failed for ${filename}`);
 }
 
 async function runCommand(command: string, args: string[], cwd: string, signal: AbortSignal, onEvent: InstallerOptions['onEvent'], component: string): Promise<void> {
-  const child = spawn(command, args, { cwd, shell: false, windowsHide: true, env: { ...process.env } });
+  const usesShell = /\.(cmd|ps1)$/i.test(command) || /\.(cmd|ps1)$/i.test((process.env.SHELL ?? ''));
+  const child = spawn(command, args, { cwd, shell: usesShell, windowsHide: true, env: { ...process.env } });
   let stderr = '';
   child.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
   const code = await new Promise<number>((resolve) => {

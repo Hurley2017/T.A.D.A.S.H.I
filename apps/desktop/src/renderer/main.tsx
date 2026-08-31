@@ -23,6 +23,7 @@ if (!window.tadashi) {
     delegateInstall: async () => ({ installed: false, path: '' }),
     delegateSetTier: async (tier) => ({ delegateModelTier: tier }),
     setupStatus: async () => ({ complete: true, drive: 'D:\\', freeBytes: 0, requiredBytes: 0, components: { node: true, llama: true, model: true, whisper: true, cli: true, python: true }, missing: [] }),
+    setupProbe: async () => ({ gpu: { vendor: 'nvidia', name: 'No GPU', vramGb: null }, cpuCount: 8, ramGb: 16, drives: [{ mount: 'D:\\', freeBytes: 0, preferred: true }] }),
     setupRun: async () => ({ ok: true, root: '' }),
     setupCancel: async () => ({ cancelled: true }),
     onEvent: () => () => undefined,

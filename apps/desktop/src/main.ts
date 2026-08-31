@@ -1,14 +1,16 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { join, basename, dirname } from 'node:path';
 import { access, mkdir, cp } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
+import * as os from 'node:os';
 import { createStore, type TadashiStore } from '../../../packages/persistence/src';
 import { EventBus } from '../../../packages/monitoring/src';
 import { FileMonitor, GitMonitor, NotificationService } from '../../../packages/monitoring/src';
 import { ApiAgentAdapter, CliAgentAdapter, CommandCodeAdapter, type AgentAdapter } from '../../../packages/agents/src';
 import { AnthropicClient, BrainService, OpenAiCompatibleClient, checkLlamaHealth, type ModelClient } from '../../../packages/brain/src';
 import { ApprovalService, EncryptedCredentialStore, GitService, GitHubProvider, GitLabProvider, Orchestrator, ProjectService, defaultAutonomyPolicy, projectFromPath, selectGitHostProvider } from '../../../packages/orchestrator/src';
-import { buildManifest, detectSetupStatus, detectTargetDrive, installComponent, totalRequiredBytes, type SetupEvent } from '../../../packages/setup/src';
+import { buildManifest, detectSetupStatus, detectTargetDrive, installComponent, listDrives, totalRequiredBytes, DEFAULT_CHOICES, type SetupChoices, type SetupEvent, type SystemProbe } from '../../../packages/setup/src';
 import { NativeTextToSpeech, TtsQueue, VoiceLoop, defaultVoiceLoopConfig, type TextToSpeech } from '../../../packages/voice/src';
 import { IdSchema, ResolveApprovalInputSchema, SubmitMessageInputSchema, TranscribeAudioInputSchema, type Project, type ProjectEvent } from '../../../packages/contracts/src';
 import { safeStorage, Tray, Menu, Notification as ElectronNotification } from 'electron';
@@ -40,6 +42,10 @@ let commandCodePath = process.env.TADASHI_COMMAND_CODE_EXECUTABLE ?? 'cmdc';
 let delegateModelTier: 'free-only' | 'auto' = 'free-only';
 let setupRunning = false;
 let setupAbort: AbortController | undefined;
+
+function isModelAt(root: string): boolean {
+  return existsSync(join(root, 'models', 'Qwen3-8B-Q4_K_M.gguf'));
+}
 
 /** Spawns the local llama.cpp brain server hidden and probes until it is healthy. */
 function startEmbeddedBrain(): void {
@@ -293,15 +299,28 @@ function registerIpc(): void {
     const drive = detectTargetDrive(totalRequiredBytes());
     return { ...detectSetupStatus(), drive: drive?.mount ?? 'C:\\', freeBytes: drive?.freeBytes ?? 0, requiredBytes: totalRequiredBytes() };
   });
-  ipcMain.handle('setup:run', async () => {
+  ipcMain.handle('setup:probe', async () => {
+    // NVIDIA GPU detection via nvidia-smi; fall back to a conservative CPU-only profile.
+    let gpu: SystemProbe['gpu'] = { vendor: 'unknown', name: 'No GPU detected', vramGb: null };
+    try {
+      const probe = spawnSync('nvidia-smi', ['--query-gpu=name,memory.total', '--format=csv,noheader,nounits'], { shell: false, windowsHide: true, timeout: 10_000 });
+      if (probe.status === 0) {
+        const first = String(probe.stdout).trim().split(/\r?\n/)[0];
+        const [name, vram] = first.split(',').map((part) => part.trim());
+        gpu = { vendor: 'nvidia', name, vramGb: Number(vram) / 1024 };
+      }
+    } catch {}
+    return { gpu, cpuCount: os.cpus().length, ramGb: Math.round(os.totalmem() / 1024 ** 3), drives: listDrives() };
+  });
+  ipcMain.handle('setup:run', async (_event, rawChoices) => {
     if (setupRunning) throw new Error('Setup is already running.');
     setupRunning = true;
     setupAbort = new AbortController();
-    const drive = detectTargetDrive(totalRequiredBytes());
-    const root = `${(drive?.mount ?? 'C:\\').replace(/[\\/]$/, '')}\\TadashiAI`;
+    const choices: SetupChoices = { ...DEFAULT_CHOICES, ...(rawChoices ?? {}) };
+    const root = choices.root;
     const status = detectSetupStatus();
-    const manifest = buildManifest(root);
-    const pending = manifest.filter((component) => !status.components[component.id as keyof typeof status.components]);
+    const manifest = buildManifest(root, choices);
+    const pending = manifest.filter((component) => !status.components[component.id as keyof typeof status.components] || (component.id === 'model' && !isModelAt(root)));
     try {
       for (const component of pending) {
         await installComponent(component, {

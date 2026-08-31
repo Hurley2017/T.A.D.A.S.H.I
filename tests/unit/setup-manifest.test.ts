@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildManifest } from '../../packages/setup/src/manifest';
-import { requiredIntelligence, selectDelegateModel } from '../../packages/brain/src/model-catalog';
+import { buildManifest, resolveModelOption } from '../../packages/setup/src/manifest';
+import { MODEL_OPTIONS, recommendModel } from '../../packages/setup/src/environment';
 
 describe('setup manifest', () => {
   it('includes all required components', () => {
@@ -17,16 +17,25 @@ describe('setup manifest', () => {
     expect(llama?.steps[0].targetDir).toBe('E:\\TadashiAI\\llama');
   });
 
-  it('uses portable npm for post-install steps', () => {
-    const manifest = buildManifest('D:\\TadashiAI');
-    const cli = manifest.find((component) => component.id === 'cli');
-    expect(cli?.postInstall?.[0].command).toBe('D:\\TadashiAI\\node\\npm.cmd');
+  it('uses chosen model option when a custom model is selected', () => {
+    const manifest = buildManifest('D:\\TadashiAI', { modelId: 'qwen3-4b-q8' });
+    const model = manifest.find((component) => component.id === 'model');
+    expect(model?.label).toContain('Qwen3 4B');
   });
 });
 
-describe('delegation selects matching models', () => {
-  it('matches free-only tier against required intelligence', () => {
-    const result = selectDelegateModel('medium', 'free-only');
-    expect(result.free).toBe(true);
+describe('model recommendation', () => {
+  it('recommends the 8B model for 8 GB GPUs', () => {
+    expect(recommendModel(8, 16).id).toBe('qwen3-8b-q4');
+  });
+
+  it('recommends the lightweight model for small or no GPU', () => {
+    expect(recommendModel(null, 16).id).toBe('qwen3-4b-q8');
+    expect(recommendModel(4, 16).id).toBe('qwen3-4b-q8');
+  });
+
+  it('resolves model options by id', () => {
+    expect(resolveModelOption('qwen3-8b-q4').filename).toBe('Qwen3-8B-Q4_K_M.gguf');
+    expect(MODEL_OPTIONS.length).toBeGreaterThanOrEqual(2);
   });
 });
