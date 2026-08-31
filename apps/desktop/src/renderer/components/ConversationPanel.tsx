@@ -15,6 +15,55 @@ export function ConversationPanel({ messages, disabled, assessing = false, onSub
   const [isListening, setIsListening] = useState(false);
   const mediaRecorder = useRef<MediaRecorder | undefined>(undefined);
   const audioChunks = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | undefined>(undefined);
+  const isHolding = useRef(false);
+
+  async function startListening() {
+    if (isHolding.current || !navigator.mediaDevices?.getUserMedia) {
+      if (!navigator.mediaDevices?.getUserMedia) onVoiceError('Microphone access is unavailable in this desktop session.');
+      return;
+    }
+    isHolding.current = true;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // The user may have released while the mic was being opened — cancel instead of starting late.
+      if (!isHolding.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      streamRef.current = stream;
+      audioChunks.current = [];
+      const recorder = new MediaRecorder(stream);
+      mediaRecorder.current = recorder;
+      recorder.ondataavailable = (event) => audioChunks.current.push(event.data);
+      recorder.onstop = async () => {
+        stream.getTracks().forEach((track) => track.stop());
+        streamRef.current = undefined;
+        setIsListening(false);
+        try {
+          const blob = new Blob(audioChunks.current, { type: recorder.mimeType });
+          const wav = await blobToWav(blob);
+          const transcript = await window.tadashi.transcribeAudio(wav, 'audio/wav');
+          setContent((current) => current ? `${current} ${transcript}`.trim() : transcript);
+        } catch (error) {
+          onVoiceError(error instanceof Error ? error.message : 'Voice transcription could not start.');
+        }
+      };
+      recorder.start();
+      setIsListening(true);
+    } catch (error) {
+      isHolding.current = false;
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      onVoiceError(error instanceof Error ? error.message : 'Microphone permission was not granted.');
+    }
+  }
+
+  function stopListening() {
+    if (!isHolding.current) return;
+    isHolding.current = false;
+    if (mediaRecorder.current?.state === 'recording') mediaRecorder.current.stop();
+    else setIsListening(false);
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -30,37 +79,8 @@ export function ConversationPanel({ messages, disabled, assessing = false, onSub
   }
 
   async function toggleVoice() {
-    if (isListening) {
-      mediaRecorder.current?.stop();
-      return;
-    }
-    if (!navigator.mediaDevices?.getUserMedia) {
-      onVoiceError('Microphone access is unavailable in this desktop session.');
-      return;
-    }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      audioChunks.current = [];
-      const recorder = new MediaRecorder(stream);
-      mediaRecorder.current = recorder;
-      recorder.ondataavailable = (event) => audioChunks.current.push(event.data);
-      recorder.onstop = async () => {
-        stream.getTracks().forEach((track) => track.stop());
-        setIsListening(false);
-        try {
-          const blob = new Blob(audioChunks.current, { type: recorder.mimeType });
-          const wav = await blobToWav(blob);
-          const transcript = await window.tadashi.transcribeAudio(wav, 'audio/wav');
-          setContent(transcript);
-        } catch (error) {
-          onVoiceError(error instanceof Error ? error.message : 'Voice transcription could not start.');
-        }
-      };
-      recorder.start();
-      setIsListening(true);
-    } catch (error) {
-      onVoiceError(error instanceof Error ? error.message : 'Microphone permission was not granted.');
-    }
+    if (isListening) stopListening();
+    else await startListening();
   }
 
   return (
@@ -90,9 +110,9 @@ export function ConversationPanel({ messages, disabled, assessing = false, onSub
         <label htmlFor="command-input">Instruction</label>
         <textarea id="command-input" value={content} onChange={(event) => setContent(event.target.value)} placeholder="e.g. Find why the onboarding test is failing and propose a fix" rows={3} disabled={disabled || isSending} />
         <div className="composer-actions">
-          <button className={`voice-button ${isListening ? 'is-listening' : ''}`} onClick={toggleVoice} type="button" disabled={disabled || isSending} aria-pressed={isListening}>
+          <button className={`voice-button ${isListening ? 'is-listening' : ''}`} onMouseDown={(event) => { event.preventDefault(); void startListening(); }} onMouseUp={stopListening} onMouseLeave={stopListening} onTouchStart={(event) => { event.preventDefault(); void startListening(); }} onTouchEnd={(event) => { event.preventDefault(); stopListening(); }} type="button" disabled={disabled || isSending} aria-pressed={isListening}>
             <span className="voice-dot" aria-hidden="true" />
-            {isListening ? 'Stop listening' : 'Push to talk'}
+            {isListening ? 'Release to stop talking' : 'Hold to talk 🎙'}
           </button>
           <button className="send-button" type="submit" disabled={disabled || isSending || !content.trim()}>
             {isSending ? 'Assessing…' : 'Route instruction'}

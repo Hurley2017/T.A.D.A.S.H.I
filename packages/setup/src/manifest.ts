@@ -29,8 +29,10 @@ export function resolveModelOption(modelId: string): ModelOption {
 
 export function buildManifest(root = 'D:\\TadashiAI', choices: Partial<SetupChoices> = {}): ComponentManifest[] {
   // The portable Node runtime is installed first, so its npm is used for the CLI.
+  // Invoke npm through node.exe + npm-cli.js (never npm.cmd — paths can contain spaces).
   const nodeDir = join(root, 'node');
-  const npmPath = join(nodeDir, 'npm.cmd');
+  const nodeExe = join(nodeDir, 'node.exe');
+  const npmCli = join(nodeDir, 'node_modules', 'npm', 'bin', 'npm-cli.js');
   const model = resolveModelOption(choices.modelId ?? 'qwen3-8b-q4');
   const whisperUrl = WHISPER_MODELS[choices.whisperModel ?? 'base.en']?.url ?? WHISPER_MODELS['base.en'].url;
   return [
@@ -82,7 +84,7 @@ export function buildManifest(root = 'D:\\TadashiAI', choices: Partial<SetupChoi
       description: 'The delegated coding agent (uses the user\'s Command Code login).',
       sizeLabel: '~60 MB',
       steps: [],
-      postInstall: [{ command: npmPath, args: ['i', '-g', 'command-code'], label: 'Install Command Code CLI via npm' }],
+      postInstall: [{ command: nodeExe, args: [npmCli, 'i', '-g', 'command-code'], label: 'Install Command Code CLI via npm' }],
       required: true,
     },
   ];

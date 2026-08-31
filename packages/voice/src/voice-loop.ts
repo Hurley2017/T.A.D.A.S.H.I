@@ -65,7 +65,7 @@ export class VoiceLoop {
 
   think(): void { if (this.state === 'transcribing') this.state = 'thinking'; }
 
-  speak(): void { if (this.state === 'thinking') this.state = 'speaking'; }
+  speak(): void { if (this.state !== 'muted' && this.state !== 'error') this.state = 'speaking'; }
 
   finishSpeak(): void { if (this.state === 'speaking') this.state = this.config.enabled ? 'listening' : 'idle'; }
 

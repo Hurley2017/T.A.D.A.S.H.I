@@ -1,6 +1,6 @@
 {
   "name": "tadashi",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "A voice-first local orchestrator for AI coding agents.",
   "private": true,
   "type": "module",

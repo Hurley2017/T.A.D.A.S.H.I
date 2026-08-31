@@ -7,8 +7,8 @@ export interface SpeechToText {
 export class WhisperSpeechToText implements SpeechToText {
   private readonly process: WhisperProcess;
 
-  constructor(whisperExecutable: string) {
-    this.process = new WhisperProcess(whisperExecutable);
+  constructor(whisperExecutable: string, modelPath?: string) {
+    this.process = new WhisperProcess(whisperExecutable, modelPath);
   }
 
   transcribe(audio: Uint8Array, mimeType?: string): Promise<string> {

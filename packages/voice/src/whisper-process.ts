@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 export class WhisperProcess {
-  constructor(private readonly executable: string) {}
+  constructor(private readonly executable: string, private readonly modelPath?: string) {}
 
   async transcribe(audio: Uint8Array, mimeType = 'audio/wav'): Promise<string> {
     const directory = await mkdtemp(join(tmpdir(), 'tadashi-whisper-'));
@@ -15,7 +15,9 @@ export class WhisperProcess {
     await writeFile(inputPath, audio);
     try {
       await new Promise<void>((resolve, reject) => {
-        const child = spawn(this.executable, ['-f', inputPath, '-otxt', '-of', outputBasePath], { shell: false, windowsHide: true });
+        const args = ['-f', inputPath, '-otxt', '-of', outputBasePath];
+        if (this.modelPath) args.push('-m', this.modelPath);
+        const child = spawn(this.executable, args, { shell: false, windowsHide: true });
         let stderr = '';
         child.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
         child.on('error', reject);

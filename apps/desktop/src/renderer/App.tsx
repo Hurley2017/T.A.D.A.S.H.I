@@ -7,6 +7,7 @@ import { AgentRunPanel } from './components/AgentRunPanel';
 import { ApprovalDialog } from './components/ApprovalDialog';
 import { DelegationPanel } from './components/DelegationPanel';
 import { SetupWizard } from './components/SetupWizard';
+import { Onboarding } from './components/Onboarding';
 
 type State = { projects: Project[]; project?: Project; messages: ConversationMessage[]; tasks: Task[]; runs: AgentRun[]; approvals: ApprovalRequest[]; events: ProjectEvent[]; agentReady: boolean; brainReady: boolean; brainModel: string; brainProvider: 'openai-compatible' | 'anthropic' | 'fallback'; brainFallBackReason: string; voiceOutput: boolean; voiceState: 'idle' | 'listening' | 'wake-detected' | 'recording' | 'transcribing' | 'thinking' | 'speaking' | 'muted' | 'error'; autonomyPolicy: { voiceConfirmedDestructive: boolean; voiceConfirmedNetwork: boolean; voiceConfirmedGitPush: boolean; voiceConfirmedProjectDelete: boolean; voiceConfirmedForceOperation: boolean; allowedProjects: 'all' | 'selected' | 'explicit' }; gitConfigured: boolean; gitProvider: 'github' | 'gitlab'; delegateModelTier: 'free-only' | 'auto'; commandCodePath: string };
 const emptyState: State = { projects: [], messages: [], tasks: [], runs: [], approvals: [], events: [], agentReady: false, brainReady: false, brainModel: '', brainProvider: 'fallback', brainFallBackReason: '', voiceOutput: false, voiceState: 'idle', autonomyPolicy: { voiceConfirmedDestructive: true, voiceConfirmedNetwork: true, voiceConfirmedGitPush: true, voiceConfirmedProjectDelete: true, voiceConfirmedForceOperation: true, allowedProjects: 'selected' }, gitConfigured: false, gitProvider: 'github', delegateModelTier: 'free-only', commandCodePath: '' };
@@ -14,9 +15,11 @@ const emptyState: State = { projects: [], messages: [], tasks: [], runs: [], app
 export function App() {
   const [state, setState] = useState<State>(emptyState);
   const [error, setError] = useState<string>();
+  const [notice, setNotice] = useState<string>();
   const [isLoading, setIsLoading] = useState(true);
   const [isAssessing, setIsAssessing] = useState(false);
   const [setupIncomplete, setSetupIncomplete] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(() => !localStorage.getItem('tadashi.onboarded'));
 
   async function refresh() {
     try {
@@ -34,6 +37,13 @@ export function App() {
     void window.tadashi.setupStatus().then((status) => setSetupIncomplete(!status.complete)).catch(() => undefined);
     return window.tadashi.onEvent(() => { void refresh(); });
   }, []);
+
+  useEffect(() => {
+    if (!isLoading && !state.project && !setupIncomplete) {
+      // No project selected yet — open the folder picker so the user can start immediately.
+      void selectProject();
+    }
+  }, [isLoading, state.project, setupIncomplete]);
 
   async function selectProject(projectId?: string) {
     try {
@@ -91,17 +101,18 @@ export function App() {
         <ProjectPicker projects={state.projects} activeProject={state.project} onSelect={(projectId) => void selectProject(projectId)} />
         <nav className="side-nav" aria-label="Workspace views">
           <button className="nav-item is-selected" type="button" aria-current="page"><span aria-hidden="true">◎</span> Overview <kbd>1</kbd></button>
-          <button className="nav-item" type="button" onClick={() => setError('Activity timeline is coming next.')}><span aria-hidden="true">◫</span> Activity <span className="nav-count">{state.events.length || ''}</span></button>
-          <button className="nav-item" type="button" onClick={() => setError(state.brainReady ? `${state.brainProvider} brain · ${state.brainModel}` : 'Set TADASHI_BRAIN_BASE_URL and TADASHI_BRAIN_MODEL to enable assessment.')}><span aria-hidden="true">◇</span> Agent roster <span className="nav-state"><i /> {state.agentReady ? 'Worker ready' : 'Configure worker'}</span></button>
+          <button className="nav-item" type="button" onClick={() => setNotice(`Activity: ${state.events.length} signals recorded so far.`)}><span aria-hidden="true">◫</span> Activity <span className="nav-count">{state.events.length || ''}</span></button>
+          <button className="nav-item" type="button" onClick={() => setNotice(state.agentReady ? `Worker ready: Command Code delegate is configured.` : 'Worker not installed — use the "Install worker" button in the Delegation panel on the right.')}><span aria-hidden="true">◇</span> Agent roster <span className="nav-state"><i /> {state.agentReady ? 'Worker ready' : 'Configure worker'}</span></button>
         </nav>
-        <div className="sidebar-footer"><div className="privacy-mark"><span aria-hidden="true">◉</span><span><strong>Local by default</strong><small>Project signals stay on this device</small></span></div><button className="settings-button" type="button" aria-label="Open settings" onClick={() => setError(`Voice: ${voiceLabel}. Git: ${gitLabel}.`)}>⚙</button></div>
+        <div className="sidebar-footer"><div className="privacy-mark"><span aria-hidden="true">◉</span><span><strong>Local by default</strong><small>Project signals stay on this device</small></span></div><button className="settings-button" type="button" aria-label="Open status" onClick={() => setNotice(`${voiceLabel}. ${gitLabel}. ${state.brainReady ? `${state.brainProvider} brain (${state.brainModel}).` : 'Brain still starting.'}`)}>⚙</button></div>
       </aside>
       <main className="main-content" id="main-content">
-        <header className="topbar"><div className="breadcrumb"><span>T.A.D.A.S.H.I.</span><span aria-hidden="true">/</span><strong>{state.project?.name ?? 'No workspace selected'}</strong></div><div className="topbar-actions"><span className={`system-state ${pendingApproval ? 'is-warning' : ''}`}><i /> {pulseLabel}</span><button className="icon-button" type="button" aria-label="Refresh project state" onClick={() => void refresh()}>↻</button><button className="avatar-button" type="button" aria-label="Open profile" onClick={() => setError('Profile settings are not part of this first slice.')}>TS</button></div></header>
+        <header className="topbar"><div className="breadcrumb"><span>T.A.D.A.S.H.I.</span><span aria-hidden="true">/</span><strong>{state.project?.name ?? 'No workspace selected'}</strong></div><div className="topbar-actions"><span className={`system-state ${pendingApproval ? 'is-warning' : ''}`}><i /> {pulseLabel}</span><button className="icon-button" type="button" aria-label="Refresh project state" onClick={() => void refresh()}>↻</button><button className="avatar-button" type="button" aria-label="Status" onClick={() => setNotice(`${state.brainReady ? `Brain online (${state.brainModel}).` : 'Brain starting.'} ${voiceLabel}. ${gitLabel}.`)}>TS</button></div></header>
         <div className="content-grid">
           <div className="center-column">
             <section className="status-banner" aria-label="Project status"><div className="status-visual" aria-hidden="true"><span className="status-core" /><span className="status-ring ring-one" /><span className="status-ring ring-two" /></div><div className="status-copy"><div className="section-kicker">{state.brainReady ? `${state.brainProvider} brain · ${state.brainModel}` : 'Fallback planner'}</div><h1>{state.project ? report : 'Open a project to begin.'}</h1><p>{state.project ? `${state.project.path} · ${latestGit ? `${String(latestGit.payload.changedFiles)} changed files` : 'Git state will appear here'}${latestFile ? ` · Last signal ${String(latestFile.payload.path)}` : ''}` : 'I’ll listen for your direction, then coordinate the right agent.'}</p></div><span className="status-time">{isLoading ? 'Syncing…' : 'Synced now'}</span></section>
             {error && <div className="error-banner" role="alert"><span aria-hidden="true">!</span><p>{error}</p><button type="button" onClick={() => setError(undefined)}>Dismiss</button></div>}
+            {notice && <div className="notice-banner" role="status"><span aria-hidden="true">i</span><p>{notice}</p><button type="button" onClick={() => setNotice(undefined)}>Dismiss</button></div>}
             <ConversationPanel messages={state.messages} disabled={!state.project || isAssessing} assessing={isAssessing} onSubmit={submitMessage} onVoiceError={setError} />
             <TaskBoard tasks={state.tasks} />
           </div>
@@ -110,6 +121,17 @@ export function App() {
       </main>
       <div className="sr-only" role="status" aria-live="polite">{report}</div>
       {setupIncomplete && <SetupWizard onComplete={() => setSetupIncomplete(false)} />}
+      {showOnboarding && !setupIncomplete && (
+        <Onboarding
+          hasProject={Boolean(state.project)}
+          hasVoice={state.voiceOutput}
+          hasDelegate={state.agentReady}
+          brainOnline={state.brainReady}
+          onOpenProject={() => void selectProject()}
+          onOpenSettings={() => setNotice('Worker and voice settings are in the right-hand panel.')}
+          onDismiss={() => { localStorage.setItem('tadashi.onboarded', '1'); setShowOnboarding(false); }}
+        />
+      )}
     </div>
   );
 }

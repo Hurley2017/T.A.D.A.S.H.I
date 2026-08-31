@@ -178,7 +178,7 @@ export const ResolveApprovalInputSchema = z.object({
 export type ResolveApprovalInput = z.infer<typeof ResolveApprovalInputSchema>;
 
 export const TranscribeAudioInputSchema = z.object({
-  audio: z.instanceof(Uint8Array).refine((value) => value.byteLength > 0 && value.byteLength <= 25_000_000, 'Audio input is invalid or too large.'),
+  audio: z.custom<Uint8Array>((value) => value instanceof Uint8Array && value.byteLength > 0 && value.byteLength <= 25_000_000, 'Audio input is invalid or too large.'),
   mimeType: z.string().regex(/^audio\/wav$/, 'Audio format is not supported.'),
 });
 export type TranscribeAudioInput = z.infer<typeof TranscribeAudioInputSchema>;

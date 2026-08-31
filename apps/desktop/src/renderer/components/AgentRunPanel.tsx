@@ -18,7 +18,7 @@ export function AgentRunPanel({ runs, events, agentReady }: Props) {
           <span className="run-time">{formatTime(latestRun.startedAt)}</span>
         </div>
       ) : (
-        <div className="agent-idle"><span className="idle-line" aria-hidden="true" /><strong>{agentReady ? 'Agent channel ready' : 'No agent configured'}</strong><small>{agentReady ? 'Approve a task to begin a run.' : 'Set TADASHI_CLI_EXECUTABLE to connect a CLI.'}</small></div>
+        <div className="agent-idle"><span className="idle-line" aria-hidden="true" /><strong>{agentReady ? 'Agent channel ready' : 'No agent configured'}</strong><small>{agentReady ? 'Approve a task to begin a run.' : 'Install the worker in the Delegation panel on the right.'}</small></div>
       )}
       <div className="output-window" aria-label="Latest agent output">
         {outputEvents.length === 0 ? <code>$ waiting for the next signal…</code> : outputEvents.map((event) => <code key={event.id}><span>›</span> {String(event.payload.content)}</code>)}
