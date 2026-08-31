@@ -1,0 +1,34 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "baseUrl": ".",
+    "paths": {
+      "@contracts/*": ["packages/contracts/src/*"],
+      "@persistence/*": ["packages/persistence/src/*"],
+      "@agents/*": ["packages/agents/src/*"],
+      "@monitoring/*": ["packages/monitoring/src/*"],
+      "@orchestrator/*": ["packages/orchestrator/src/*"]
+    },
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "types": ["node", "vitest/globals"]
+  },
+  "include": [
+    "apps/**/*.ts",
+    "apps/**/*.tsx",
+    "packages/**/*.ts",
+    "packages/**/*.tsx",
+    "tests/**/*.ts",
+    "scripts/**/*.ts",
+    "vite.config.ts"
+  ]
+}

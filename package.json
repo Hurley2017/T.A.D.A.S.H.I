@@ -1,0 +1,49 @@
+{
+  "name": "tadashi",
+  "version": "0.1.0",
+  "description": "A voice-first local orchestrator for AI coding agents.",
+  "private": true,
+  "type": "module",
+  "main": "dist-electron/main/index.js",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "electron-vite dev",
+    "dev:web": "vite apps/desktop/src/renderer --host 127.0.0.1",
+    "build": "electron-vite build",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "vitest run tests/integration",
+    "test:e2e": "playwright test",
+    "package": "electron-builder",
+    "verify:agent-cli": "tsx scripts/verify-agent-cli.ts",
+    "verify:whisper": "tsx scripts/verify-whisper.ts",
+    "verify:llama": "tsx scripts/verify-llama.ts",
+    "setup:cc": "tsx scripts/setup-commandcode-cli.ts",
+    "verify:cc": "tsx scripts/verify-commandcode.ts"
+  },
+  "dependencies": {
+    "chokidar": "^4.0.3",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.50.1",
+    "@types/node": "^22.13.4",
+    "@types/react": "^19.0.8",
+    "@types/react-dom": "^19.0.3",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^34.2.0",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^3.1.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vite": "^6.1.0",
+    "vitest": "^3.0.5"
+  }
+}

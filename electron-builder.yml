@@ -1,0 +1,25 @@
+appId: ai.tadashi.desktop
+productName: T.A.D.A.S.H.I
+directories:
+  output: release
+files:
+  - dist/**
+  - dist-electron/**
+  - package.json
+asar: true
+extraResources:
+  - from: resources
+    to: resources
+win:
+  target: nsis
+  signAndEditExecutable: false
+  artifactName: ${productName} Setup ${version}.${ext}
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+mac:
+  target: dmg
+linux:
+  target: AppImage
