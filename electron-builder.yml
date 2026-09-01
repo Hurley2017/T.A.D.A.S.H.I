@@ -10,6 +10,12 @@ asar: true
 extraResources:
   - from: resources
     to: resources
+    filter:
+      - "**/*"
+  - from: resources/ai_backend/dist
+    to: ai_backend
+    filter:
+      - "ai_backend.exe"
 win:
   target: nsis
   signAndEditExecutable: false

@@ -44,6 +44,8 @@ let setupRunning = false;
 let setupAbort: AbortController | undefined;
 let brainSpawned = false;
 let brainProcess: ReturnType<typeof spawn> | undefined;
+let aiBackendProcess: ReturnType<typeof spawn> | undefined;
+let aiBackendSpawned = false;
 
 function isModelAt(root: string): boolean {
   return existsSync(join(root, 'models', 'Qwen3-8B-Q4_K_M.gguf'));
@@ -76,7 +78,22 @@ function startEmbeddedBrain(): void {
     }
     if (brainSpawned) return;
     brainSpawned = true;
-    brainProcess = spawn(serverPath, ['--model', modelPath, '--host', '127.0.0.1', '--port', '8080', '--ctx-size', '8192', '--n-gpu-layers', '999', '--flash-attn', 'on', '--threads', '8', '--parallel', '1', '--log-file', logPath], { shell: false, windowsHide: true, stdio: 'ignore' });
+    const child = spawn(serverPath, ['--model', modelPath, '--host', '127.0.0.1', '--port', '8080', '--ctx-size', '8192', '--n-gpu-layers', '999', '--flash-attn', 'on', '--threads', '8', '--parallel', '1', '--log-file', logPath], { shell: false, windowsHide: true, stdio: 'ignore' });
+    brainProcess = child;
+    child.on('error', (error) => {
+      brainSpawned = false;
+      brainReady = false;
+      brainFallBackReason = `Brain server could not start: ${error.message}`;
+      refreshStatus();
+    });
+    child.on('exit', () => {
+      brainSpawned = false;
+      if (brainReady) {
+        brainReady = false;
+        brainFallBackReason = 'The brain server stopped unexpectedly.';
+        refreshStatus();
+      }
+    });
   });
 
   const probeInterval = setInterval(() => {
@@ -84,6 +101,7 @@ function startEmbeddedBrain(): void {
       if (ok) {
         clearInterval(probeInterval);
         brainReady = true;
+        brainFallBackReason = '';
         refreshStatus();
       } else if (process.env.TADASHI_BRAIN_AUTO_RESTART === 'false') {
         clearInterval(probeInterval);
@@ -143,6 +161,21 @@ function startEmbeddedBrainWith(modelPath: string): Promise<void> {
     brainProcess = spawn(serverPath, ['--model', modelPath, '--host', '127.0.0.1', '--port', '8080', '--ctx-size', '8192', '--n-gpu-layers', '999', '--flash-attn', 'on', '--threads', '8', '--parallel', '1', '--log-file', 'D:\\TadashiAI\\logs\\brain-server.log'], { shell: false, windowsHide: true, stdio: 'ignore' });
     brainProcess.on('error', () => resolve());
     brainProcess.on('exit', () => { brainSpawned = false; });
+    resolve();
+  });
+}
+
+function startAiBackend(): Promise<void> {
+  return new Promise((resolve) => {
+    if (aiBackendSpawned) return resolve();
+    aiBackendSpawned = true;
+    const exePath = app.isPackaged 
+      ? join(process.resourcesPath, 'ai_backend', 'ai_backend.exe')
+      : join(__dirname, '..', '..', '..', 'resources', 'ai_backend', 'dist', 'ai_backend.exe');
+    
+    aiBackendProcess = spawn(exePath, [], { shell: false, windowsHide: true, stdio: 'ignore' });
+    aiBackendProcess.on('error', () => resolve());
+    aiBackendProcess.on('exit', () => { aiBackendSpawned = false; });
     resolve();
   });
 }
@@ -590,7 +623,8 @@ app.whenReady().then(() => {
     const modelClient: ModelClient = brainProtocol === 'anthropic'
       ? new AnthropicClient(brainModelConfig, brainBaseUrl, process.env.TADASHI_BRAIN_API_KEY ?? '')
       : new OpenAiCompatibleClient(brainModelConfig, brainBaseUrl, process.env.TADASHI_BRAIN_API_KEY);
-    brainReady = true;
+    // Do NOT claim the brain is ready here — that is decided by a live /health probe.
+    brainReady = false;
     brainModel = brainModelConfig;
     brainProvider = brainProtocol;
     brain = new BrainService(modelClient, { timeoutMs: Number(process.env.TADASHI_BRAIN_TIMEOUT_MS ?? 60_000) });
@@ -639,6 +673,7 @@ app.whenReady().then(() => {
   })();
   eventBus.subscribe((event) => mainWindow?.webContents.send('event:project', event));
   startEmbeddedBrain();
+  startAiBackend();
   activeProject = store.projects.list()[0];
   if (activeProject) startProjectMonitoring(activeProject);
   registerIpc();
@@ -654,6 +689,10 @@ app.on('before-quit', () => {
   if (brainProcess && brainSpawned) {
     brainProcess.kill();
     brainProcess = undefined;
+  }
+  if (aiBackendProcess && aiBackendSpawned) {
+    aiBackendProcess.kill();
+    aiBackendProcess = undefined;
   }
 });
 

@@ -1,14 +1,14 @@
 :root {
   color-scheme: dark;
-  font-family: 'Avenir Next', 'Segoe UI', ui-sans-serif, system-ui, sans-serif;
+  font-family: 'Inter', 'Segoe UI', ui-sans-serif, system-ui, sans-serif;
   color: #f2f3ee;
-  background: #101110;
+  background: #090d15;
   font-synthesis: none;
-  --canvas: #101110;
-  --sidebar: #151715;
-  --surface: #191b19;
-  --surface-raised: #202320;
-  --surface-soft: #1c1f1c;
+  --canvas: #090d15;
+  --sidebar: #0f1523;
+  --surface: #151b2b;
+  --surface-raised: #1c2438;
+  --surface-soft: #121826;
   --line: #303530;
   --line-soft: #262a26;
   --ink: #f2f3ee;

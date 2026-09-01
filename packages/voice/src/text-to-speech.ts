@@ -1,4 +1,7 @@
 import { spawn } from 'node:child_process';
+import { writeFile, unlink } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 export interface TextToSpeech {
   speak(text: string): Promise<void>;
@@ -8,27 +11,37 @@ export class NativeTextToSpeech implements TextToSpeech {
   async speak(text: string): Promise<void> {
     const trimmed = text.trim();
     if (!trimmed) return;
-    if (process.platform === 'win32') {
-      await new Promise<void>((resolve, reject) => {
-        // Escaped by hand: any user text with a quote character is turned into SAPI's escaped quote.
-        const escaped = trimmed.replace(/'/g, "''");
-        const child = spawn(
-          'powershell.exe',
-          ['-NoProfile', '-NonInteractive', '-Command', `(New-Object -ComObject SAPI.SpVoice).Speak('${escaped}')`],
-          { windowsHide: true, stdio: 'ignore', timeout: 60_000 },
-        );
-        let settled = false;
-        const finish = (error?: Error) => {
-          if (settled) return;
-          settled = true;
-          if (error) reject(error);
-          else resolve();
-        };
-        child.on('error', (error) => finish(new Error(`Voice output is unavailable: ${error.message}`)));
-        child.on('close', (code) => finish(code === 0 ? undefined : new Error(`Voice output failed (exit ${code ?? 'unknown'}).`)));
+    
+    try {
+      const response = await fetch('http://127.0.0.1:8081/synthesize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: trimmed })
       });
-      return;
+      
+      if (!response.ok) throw new Error(`TTS Error: ${response.statusText}`);
+      
+      const buffer = await response.arrayBuffer();
+      const tmpFile = join(tmpdir(), `tts_${Date.now()}.wav`);
+      await writeFile(tmpFile, Buffer.from(buffer));
+      
+      await new Promise<void>((resolve, reject) => {
+        let child;
+        if (process.platform === 'win32') {
+          // Play wav in background without opening media player UI
+          child = spawn('powershell.exe', ['-c', `(New-Object System.Media.SoundPlayer '${tmpFile}').PlaySync()`], { windowsHide: true, stdio: 'ignore' });
+        } else if (process.platform === 'darwin') {
+          child = spawn('afplay', [tmpFile], { windowsHide: true, stdio: 'ignore' });
+        } else {
+          child = spawn('aplay', [tmpFile], { windowsHide: true, stdio: 'ignore' });
+        }
+        child.on('error', reject);
+        child.on('close', resolve);
+      });
+      
+      await unlink(tmpFile).catch(() => {});
+    } catch (e) {
+      console.error('Failed to synthesize:', e);
     }
-    await Promise.resolve();
   }
 }

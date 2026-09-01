@@ -1,4 +1,5 @@
 import { useRef, useState, type FormEvent } from 'react';
+import { WaveVisualizer } from './WaveVisualizer';
 import type { ConversationMessage } from '@contracts/index';
 
 type Props = {
@@ -83,6 +84,12 @@ export function ConversationPanel({ messages, disabled, assessing = false, onSub
     else await startListening();
   }
 
+  // Derive wave state
+  let waveState: 'idle' | 'listening' | 'thinking' | 'speaking' = 'idle';
+  if (isListening) waveState = 'listening';
+  else if (isSending || assessing) waveState = 'thinking';
+  else if (messages.length > 0 && messages[messages.length - 1].role === 'assistant') waveState = 'speaking'; // Approximate speaking for now
+
   return (
     <section className="conversation-panel" aria-labelledby="conversation-heading">
       <div className="panel-heading">
@@ -92,6 +99,12 @@ export function ConversationPanel({ messages, disabled, assessing = false, onSub
         </div>
         <span className="live-indicator"><span aria-hidden="true" /> {assessing ? 'Assessing request' : 'Ready for intent'}</span>
       </div>
+      
+      {/* Aurora Wave Visualizer injected at the top */}
+      <div style={{ marginBottom: '16px' }}>
+        <WaveVisualizer state={waveState} />
+      </div>
+
       <div className="conversation-log" aria-live="polite">
         {messages.length === 0 ? (
           <div className="conversation-empty">
