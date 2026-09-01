@@ -6,13 +6,12 @@ export class WhisperSpeechToText implements SpeechToText {
   constructor(whisperExecutable: string, modelPath?: string) {}
 
   async transcribe(audio: Uint8Array, mimeType?: string): Promise<string> {
-    const formData = new FormData();
     const blob = new Blob([audio], { type: mimeType || 'audio/wav' });
-    formData.append('file', blob, 'audio.wav');
     
     const response = await fetch('http://127.0.0.1:8081/transcribe', {
       method: 'POST',
-      body: formData
+      headers: { 'Content-Type': mimeType || 'audio/wav' },
+      body: blob
     });
     
     if (!response.ok) {
